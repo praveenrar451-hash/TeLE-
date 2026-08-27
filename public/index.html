@@ -29,7 +29,7 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            height: 85vh; /* Fixed height for chat container */
+            height: 85vh;
         }
 
         #login-screen {
@@ -52,7 +52,6 @@
             border-radius: 8px;
             font-size: 15px;
             outline: none;
-            transition: border-color 0.2s;
         }
 
         .login-input:focus {
@@ -69,7 +68,6 @@
             font-weight: bold;
             font-size: 16px;
             cursor: pointer;
-            transition: background 0.2s;
         }
 
         .login-btn:hover {
@@ -84,10 +82,9 @@
         }
 
         #chat-screen {
-            display: none; /* By default hidden, shown via JS if logged in */
+            display: none;
         }
 
-        /* FIXED HEADER */
         .chat-header {
             background: #4f46e5;
             color: white;
@@ -97,7 +94,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            flex-shrink: 0; /* Header apni jagah se move nahi hoga */
+            flex-shrink: 0;
         }
 
         .header-right {
@@ -129,9 +126,20 @@
             box-shadow: 0 0 5px #22c55e;
         }
 
-        /* SCROLLABLE CHAT BOX (Only this area will scroll) */
+        /* Typing indicator text below header */
+        #typing-indicator {
+            font-size: 12px;
+            color: #64748b;
+            padding: 4px 20px;
+            background: #f1f5f9;
+            height: 22px;
+            font-style: italic;
+            display: none;
+            flex-shrink: 0;
+        }
+
         #chat-box {
-            flex: 1; /* Ye beech ki jagah poori gherega aur scroll hoga */
+            flex: 1;
             padding: 20px;
             overflow-y: auto;
             background: #f8fafc;
@@ -174,19 +182,35 @@
             gap: 15px;
         }
 
-        .msg-time {
-            font-size: 9px;
-            font-weight: normal;
+        .msg-footer {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 5px;
+            margin-top: 4px;
+            font-size: 10px;
+            opacity: 0.8;
         }
 
-        /* FIXED INPUT AREA AT BOTTOM */
+        /* Tick styling for Sent/Seen */
+        .tick {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .tick.sent {
+            color: #cbd5e1; /* Gray single/double tick */
+        }
+        .tick.seen {
+            color: #38bdf8; /* Blue double tick for seen */
+        }
+
         .chat-input-area {
             padding: 15px;
             background: #ffffff;
             border-top: 1px solid #e2e8f0;
             display: flex;
             gap: 10px;
-            flex-shrink: 0; /* Input box apni jagah se move nahi hoga */
+            flex-shrink: 0;
         }
 
         #message {
@@ -244,6 +268,9 @@
             </div>
         </div>
         
+        <!-- Typing Indicator Bar -->
+        <div id="typing-indicator"></div>
+
         <div id="chat-box"></div>
         
         <div class="chat-input-area">
@@ -268,10 +295,11 @@
         const sendBtn = document.getElementById('send');
         const messageInput = document.getElementById('message');
         const chatBox = document.getElementById('chat-box');
+        const typingIndicator = document.getElementById('typing-indicator');
 
         let currentUser = localStorage.getItem('chat_username') || '';
+        let typingTimeout = null;
 
-        // Check if user is already logged in (Auto-Login)
         if (currentUser) {
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
@@ -290,7 +318,7 @@
 
             if (password === '272009') {
                 currentUser = username;
-                localStorage.setItem('chat_username', currentUser); // Save username for auto-login
+                localStorage.setItem('chat_username', currentUser);
                 loginScreen.style.display = 'none';
                 chatScreen.style.display = 'flex';
                 loadLocalHistory();
@@ -304,15 +332,35 @@
             if (e.key === 'Enter') loginBtn.click();
         });
 
-        // Logout functionality
         logoutBtn.addEventListener('click', () => {
             localStorage.removeItem('chat_username');
-            location.reload(); // Page reload karke login screen par le aayega
+            location.reload();
+        });
+
+        // --- TYPING EVENT DETECTION ---
+        messageInput.addEventListener('input', () => {
+            socket.emit('typing', currentUser);
+
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socket.emit('stop_typing');
+            }, 1000); // 1 second ke baad typing stop show hoga
+        });
+
+        socket.on('display_typing', (username) => {
+            typingIndicator.innerText = `${username} is typing...`;
+            typingIndicator.style.display = 'block';
+        });
+
+        socket.on('hide_typing', () => {
+            typingIndicator.innerText = '';
+            typingIndicator.style.display = 'none';
         });
 
         function sendMessage() {
             const message = messageInput.value.trim();
             if (message !== "") {
+                socket.emit('stop_typing'); // Message bhejte hi typing stop kar do
                 const messageData = { 
                     sender: currentUser, 
                     message: message, 
@@ -352,12 +400,19 @@
             const isSelf = data.sender === currentUser;
             div.className = `message-card ${isSelf ? 'self' : 'other'}`;
 
+            // Sent aur Seen (Ticks) logic
+            // Khud ke message par blue double tick (seen) dikhega, doosre ke message par time dikhega
+            const tickHtml = isSelf ? `<span class="tick seen" title="Seen">✓✓</span>` : '';
+
             div.innerHTML = `
                 <div class="sender-info">
                     <span>${data.sender}</span>
-                    <span class="msg-time">${data.time || ''}</span>
                 </div>
                 <div>${data.message}</div>
+                <div class="msg-footer">
+                    <span class="msg-time">${data.time || ''}</span>
+                    ${tickHtml}
+                </div>
             `;
             
             chatBox.appendChild(div);
