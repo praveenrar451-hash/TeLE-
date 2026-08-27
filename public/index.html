@@ -20,16 +20,72 @@
             align-items: center;
         }
 
-        .chat-container {
+        /* Common Box Styling */
+        .card {
             width: 100%;
-            max-width: 450px;
-            height: 85vh;
+            max-width: 420px;
             background: #ffffff;
             border-radius: 15px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+        }
+
+        /* Login Screen Styles */
+        #login-screen {
+            padding: 30px;
+            text-align: center;
+        }
+
+        #login-screen h2 {
+            margin-bottom: 20px;
+            color: #1e293b;
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .login-input:focus {
+            border-color: #4f46e5;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .login-btn:hover {
+            background: #4338ca;
+        }
+
+        #error-msg {
+            color: #ef4444;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* Chat Screen Styles */
+        #chat-screen {
+            display: none; /* Pehle hidden rahega */
+            height: 85vh;
         }
 
         .chat-header {
@@ -98,34 +154,20 @@
             background: #ffffff;
             border-top: 1px solid #e2e8f0;
             display: flex;
-            flex-direction: column;
             gap: 10px;
         }
 
-        .input-row {
-            display: flex;
-            gap: 10px;
-        }
-
-        input {
+        #message {
+            flex: 1;
             padding: 10px 14px;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
             font-size: 14px;
             outline: none;
-            transition: border-color 0.2s;
         }
 
-        input:focus {
+        #message:focus {
             border-color: #4f46e5;
-        }
-
-        #username {
-            width: 35%;
-        }
-
-        #message {
-            flex: 1;
         }
 
         button {
@@ -151,20 +193,27 @@
 </head>
 <body>
 
-    <div class="chat-container">
+    <!-- 1. LOGIN SCREEN -->
+    <div id="login-screen" class="card">
+        <h2>🔐 Enter Chat</h2>
+        <input type="text" id="login-username" class="login-input" placeholder="Enter your username..." />
+        <input type="password" id="login-password" class="login-input" placeholder="Enter password (272009)..." />
+        <button id="login-btn" class="login-btn">Join Chat</button>
+        <div id="error-msg">Incorrect Password! Try again.</div>
+    </div>
+
+    <!-- 2. CHAT SCREEN -->
+    <div id="chat-screen" class="card">
         <div class="chat-header">
-            <span>💬 Modern Chat App</span>
+            <span id="room-title">💬 Chat App</span>
             <span title="Online"><span class="status-dot"></span> Online</span>
         </div>
         
         <div id="chat-box"></div>
         
         <div class="chat-input-area">
-            <div class="input-row">
-                <input type="text" id="username" placeholder="Your Name" />
-                <input type="text" id="message" placeholder="Type a message..." />
-                <button id="send">Send</button>
-            </div>
+            <input type="text" id="message" placeholder="Type a message..." />
+            <button id="send">Send</button>
         </div>
     </div>
 
@@ -173,17 +222,56 @@
     <script>
         const socket = io();
 
+        const loginScreen = document.getElementById('login-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const loginBtn = document.getElementById('login-btn');
+        const loginUsernameInput = document.getElementById('login-username');
+        const loginPasswordInput = document.getElementById('login-password');
+        const errorMsg = document.getElementById('error-msg');
+
         const sendBtn = document.getElementById('send');
         const messageInput = document.getElementById('message');
-        const usernameInput = document.getElementById('username');
         const chatBox = document.getElementById('chat-box');
 
+        let currentUser = '';
+
+        // Fixed Password Check
+        loginBtn.addEventListener('click', () => {
+            const username = loginUsernameInput.value.trim();
+            const password = loginPasswordInput.value.trim();
+
+            if (username === '') {
+                errorMsg.innerText = "Please enter a username!";
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            if (password === '272009') {
+                currentUser = username;
+                loginScreen.style.display = 'none';
+                chatScreen.style.display = 'flex';
+                loadChatHistory(); // Purana chat load karega
+            } else {
+                errorMsg.innerText = "Incorrect Password! Hint: 272009";
+                errorMsg.style.display = 'block';
+            }
+        });
+
+        // Enter key press support for login
+        loginPasswordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loginBtn.click();
+        });
+
+        // Send Message Function
         function sendMessage() {
-            const sender = usernameInput.value.trim() || 'Anonymous';
             const message = messageInput.value.trim();
 
             if (message !== "") {
-                const messageData = { sender, message, id: socket.id };
+                const messageData = { 
+                    sender: currentUser, 
+                    message: message, 
+                    id: socket.id 
+                };
                 socket.emit('send_message', messageData);
                 messageInput.value = '';
             }
@@ -194,11 +282,32 @@
             if (e.key === 'Enter') sendMessage();
         });
 
+        // Receive message from server
         socket.on('receive_message', (data) => {
-            const div = document.createElement('div');
+            saveAndDisplayMessage(data);
+        });
+
+        // LocalStorage me save karke screen par dikhane ka logic
+        function saveAndDisplayMessage(data) {
+            // LocalStorage se purani chat nikalo
+            let chatHistory = JSON.parse(localStorage.getItem('chat_history')) || [];
             
-            // Agar message khud ka bheja hua hai toh alag style, doosre ka hai toh alag
-            const isSelf = data.id === socket.id;
+            // Naya message add karo
+            chatHistory.push(data);
+            
+            // Wapas localStorage me save karo (Max 100 messages limit taaki memory full na ho)
+            if (chatHistory.length > 100) chatHistory.shift();
+            localStorage.setItem('chat_history', JSON.stringify(chatHistory));
+
+            // UI par render karo
+            renderMessage(data);
+        }
+
+        // Single message ko HTML me convert karke chat box me dalna
+        function renderMessage(data) {
+            const div = document.createElement('div');
+            // Check karo ki message current user ka hai ya kisi aur ka
+            const isSelf = data.sender === currentUser;
             div.className = `message-card ${isSelf ? 'self' : 'other'}`;
 
             div.innerHTML = `
@@ -208,7 +317,16 @@
             
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
-        });
+        }
+
+        // Page load / Login ke baad saari saved chat load karna
+        function loadChatHistory() {
+            chatBox.innerHTML = ''; // Pehle clear karo
+            let chatHistory = JSON.parse(localStorage.getItem('chat_history')) || [];
+            chatHistory.forEach(data => {
+                renderMessage(data);
+            });
+        }
     </script>
 </body>
 </html>
