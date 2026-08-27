@@ -29,11 +29,14 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            height: 85vh; /* Fixed height for chat container */
         }
 
         #login-screen {
             padding: 30px;
             text-align: center;
+            justify-content: center;
+            height: auto;
         }
 
         #login-screen h2 {
@@ -81,10 +84,10 @@
         }
 
         #chat-screen {
-            display: none;
-            height: 85vh;
+            display: none; /* By default hidden, shown via JS if logged in */
         }
 
+        /* FIXED HEADER */
         .chat-header {
             background: #4f46e5;
             color: white;
@@ -94,6 +97,27 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-shrink: 0; /* Header apni jagah se move nahi hoga */
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logout-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            background: #dc2626;
         }
 
         .status-dot {
@@ -105,8 +129,9 @@
             box-shadow: 0 0 5px #22c55e;
         }
 
+        /* SCROLLABLE CHAT BOX (Only this area will scroll) */
         #chat-box {
-            flex: 1;
+            flex: 1; /* Ye beech ki jagah poori gherega aur scroll hoga */
             padding: 20px;
             overflow-y: auto;
             background: #f8fafc;
@@ -154,12 +179,14 @@
             font-weight: normal;
         }
 
+        /* FIXED INPUT AREA AT BOTTOM */
         .chat-input-area {
             padding: 15px;
             background: #ffffff;
             border-top: 1px solid #e2e8f0;
             display: flex;
             gap: 10px;
+            flex-shrink: 0; /* Input box apni jagah se move nahi hoga */
         }
 
         #message {
@@ -175,7 +202,7 @@
             border-color: #4f46e5;
         }
 
-        button {
+        button.send-btn {
             background: #4f46e5;
             color: white;
             border: none;
@@ -186,7 +213,7 @@
             transition: background 0.2s;
         }
 
-        button:hover {
+        button.send-btn:hover {
             background: #4338ca;
         }
 
@@ -208,17 +235,20 @@
     </div>
 
     <!-- 2. CHAT SCREEN -->
-    <div id="chat-screen" class="card">
+    <div id="chat-screen" class="card" style="display: none;">
         <div class="chat-header">
             <span>💬 Chat App</span>
-            <span title="Online"><span class="status-dot"></span> Online</span>
+            <div class="header-right">
+                <span title="Online"><span class="status-dot"></span></span>
+                <button id="logout-btn" class="logout-btn">Logout</button>
+            </div>
         </div>
         
         <div id="chat-box"></div>
         
         <div class="chat-input-area">
             <input type="text" id="message" placeholder="Type a message..." />
-            <button id="send">Send</button>
+            <button id="send" class="send-btn">Send</button>
         </div>
     </div>
 
@@ -233,14 +263,21 @@
         const loginUsernameInput = document.getElementById('login-username');
         const loginPasswordInput = document.getElementById('login-password');
         const errorMsg = document.getElementById('error-msg');
+        const logoutBtn = document.getElementById('logout-btn');
 
         const sendBtn = document.getElementById('send');
         const messageInput = document.getElementById('message');
         const chatBox = document.getElementById('chat-box');
 
-        let currentUser = '';
+        let currentUser = localStorage.getItem('chat_username') || '';
 
-        // Login check (No password hint shown)
+        // Check if user is already logged in (Auto-Login)
+        if (currentUser) {
+            loginScreen.style.display = 'none';
+            chatScreen.style.display = 'flex';
+            loadLocalHistory();
+        }
+
         loginBtn.addEventListener('click', () => {
             const username = loginUsernameInput.value.trim();
             const password = loginPasswordInput.value.trim();
@@ -253,9 +290,10 @@
 
             if (password === '272009') {
                 currentUser = username;
+                localStorage.setItem('chat_username', currentUser); // Save username for auto-login
                 loginScreen.style.display = 'none';
                 chatScreen.style.display = 'flex';
-                loadLocalHistory(); // Local browser ki history load karega
+                loadLocalHistory();
             } else {
                 errorMsg.innerText = "Incorrect Password!";
                 errorMsg.style.display = 'block';
@@ -264,6 +302,12 @@
 
         loginPasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') loginBtn.click();
+        });
+
+        // Logout functionality
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('chat_username');
+            location.reload(); // Page reload karke login screen par le aayega
         });
 
         function sendMessage() {
@@ -284,13 +328,11 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Server se jab purani history milegi (Jab aap offline the tab ke messages bhi mil jayenge)
         socket.on('load_history', (history) => {
             localStorage.setItem('chat_history', JSON.stringify(history));
             if(currentUser) loadLocalHistory();
         });
 
-        // Live incoming message
         socket.on('receive_message', (data) => {
             saveAndDisplayMessage(data);
         });
@@ -298,9 +340,8 @@
         function saveAndDisplayMessage(data) {
             let chatHistory = JSON.parse(localStorage.getItem('chat_history')) || [];
             
-            // Check karo ki message already stored toh nahi hai (duplicate rokne ke liye)
             chatHistory.push(data);
-            if (chatHistory.length > 150) chatHistory.shift();
+            if (chatHistory.length > 200) chatHistory.shift();
             
             localStorage.setItem('chat_history', JSON.stringify(chatHistory));
             renderMessage(data);
