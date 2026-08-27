@@ -17,29 +17,36 @@ const io = new Server(server, {
     }
 });
 
-// Server par last 200 messages store rakhne ke liye array
 let messageHistory = [];
 
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    // Naye user ko pichle 200 messages bhej do
     socket.emit('load_history', messageHistory);
 
+    // Message receive aur broadcast karna
     socket.on('send_message', (data) => {
         const messageWithTime = { 
             ...data, 
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'sent' // Default status sent
         };
         
         messageHistory.push(messageWithTime);
-        
-        // Limit ko badha kar 200 kar diya hai
-        if (messageHistory.length > 200) {
-            messageHistory.shift();
-        }
+        if (messageHistory.length > 200) messageHistory.shift();
 
+        // Sabhi ko message bhejo
         io.emit('receive_message', messageWithTime);
+    });
+
+    // --- TYPING INDICATOR LOGIC ---
+    socket.on('typing', (username) => {
+        // Apne alawa baaki sabhi ko batao ki ye user type kar raha hai
+        socket.broadcast.emit('display_typing', username);
+    });
+
+    socket.on('stop_typing', () => {
+        socket.broadcast.emit('hide_typing');
     });
 
     socket.on('disconnect', () => {
