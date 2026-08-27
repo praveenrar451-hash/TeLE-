@@ -20,7 +20,6 @@
             align-items: center;
         }
 
-        /* Common Box Styling */
         .card {
             width: 100%;
             max-width: 420px;
@@ -32,7 +31,6 @@
             flex-direction: column;
         }
 
-        /* Login Screen Styles */
         #login-screen {
             padding: 30px;
             text-align: center;
@@ -82,9 +80,8 @@
             display: none;
         }
 
-        /* Chat Screen Styles */
         #chat-screen {
-            display: none; /* Pehle hidden rahega */
+            display: none;
             height: 85vh;
         }
 
@@ -142,11 +139,19 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
 
-        .sender-name {
+        .sender-info {
+            display: flex;
+            justify-content: space-between;
             font-size: 11px;
-            font-weight: bold;
             margin-bottom: 3px;
             opacity: 0.8;
+            font-weight: bold;
+            gap: 15px;
+        }
+
+        .msg-time {
+            font-size: 9px;
+            font-weight: normal;
         }
 
         .chat-input-area {
@@ -197,15 +202,15 @@
     <div id="login-screen" class="card">
         <h2>🔐 Enter Chat</h2>
         <input type="text" id="login-username" class="login-input" placeholder="Enter your username..." />
-        <input type="password" id="login-password" class="login-input" placeholder="Enter password (272009)..." />
+        <input type="password" id="login-password" class="login-input" placeholder="Enter password..." />
         <button id="login-btn" class="login-btn">Join Chat</button>
-        <div id="error-msg">Incorrect Password! Try again.</div>
+        <div id="error-msg">Incorrect Password!</div>
     </div>
 
     <!-- 2. CHAT SCREEN -->
     <div id="chat-screen" class="card">
         <div class="chat-header">
-            <span id="room-title">💬 Chat App</span>
+            <span>💬 Chat App</span>
             <span title="Online"><span class="status-dot"></span> Online</span>
         </div>
         
@@ -235,7 +240,7 @@
 
         let currentUser = '';
 
-        // Fixed Password Check
+        // Login check (No password hint shown)
         loginBtn.addEventListener('click', () => {
             const username = loginUsernameInput.value.trim();
             const password = loginPasswordInput.value.trim();
@@ -250,22 +255,19 @@
                 currentUser = username;
                 loginScreen.style.display = 'none';
                 chatScreen.style.display = 'flex';
-                loadChatHistory(); // Purana chat load karega
+                loadLocalHistory(); // Local browser ki history load karega
             } else {
-                errorMsg.innerText = "Incorrect Password! Hint: 272009";
+                errorMsg.innerText = "Incorrect Password!";
                 errorMsg.style.display = 'block';
             }
         });
 
-        // Enter key press support for login
         loginPasswordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') loginBtn.click();
         });
 
-        // Send Message Function
         function sendMessage() {
             const message = messageInput.value.trim();
-
             if (message !== "") {
                 const messageData = { 
                     sender: currentUser, 
@@ -282,36 +284,38 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Receive message from server
+        // Server se jab purani history milegi (Jab aap offline the tab ke messages bhi mil jayenge)
+        socket.on('load_history', (history) => {
+            localStorage.setItem('chat_history', JSON.stringify(history));
+            if(currentUser) loadLocalHistory();
+        });
+
+        // Live incoming message
         socket.on('receive_message', (data) => {
             saveAndDisplayMessage(data);
         });
 
-        // LocalStorage me save karke screen par dikhane ka logic
         function saveAndDisplayMessage(data) {
-            // LocalStorage se purani chat nikalo
             let chatHistory = JSON.parse(localStorage.getItem('chat_history')) || [];
             
-            // Naya message add karo
+            // Check karo ki message already stored toh nahi hai (duplicate rokne ke liye)
             chatHistory.push(data);
+            if (chatHistory.length > 150) chatHistory.shift();
             
-            // Wapas localStorage me save karo (Max 100 messages limit taaki memory full na ho)
-            if (chatHistory.length > 100) chatHistory.shift();
             localStorage.setItem('chat_history', JSON.stringify(chatHistory));
-
-            // UI par render karo
             renderMessage(data);
         }
 
-        // Single message ko HTML me convert karke chat box me dalna
         function renderMessage(data) {
             const div = document.createElement('div');
-            // Check karo ki message current user ka hai ya kisi aur ka
             const isSelf = data.sender === currentUser;
             div.className = `message-card ${isSelf ? 'self' : 'other'}`;
 
             div.innerHTML = `
-                <div class="sender-name">${data.sender}</div>
+                <div class="sender-info">
+                    <span>${data.sender}</span>
+                    <span class="msg-time">${data.time || ''}</span>
+                </div>
                 <div>${data.message}</div>
             `;
             
@@ -319,9 +323,8 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // Page load / Login ke baad saari saved chat load karna
-        function loadChatHistory() {
-            chatBox.innerHTML = ''; // Pehle clear karo
+        function loadLocalHistory() {
+            chatBox.innerHTML = '';
             let chatHistory = JSON.parse(localStorage.getItem('chat_history')) || [];
             chatHistory.forEach(data => {
                 renderMessage(data);
