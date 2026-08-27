@@ -24,24 +24,29 @@ io.on('connection', (socket) => {
 
     socket.emit('load_history', messageHistory);
 
-    // Message receive aur broadcast karna
+    // Message receive aur broadcast karna (Indian Timezone applied)
     socket.on('send_message', (data) => {
+        const indianTime = new Date().toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+
         const messageWithTime = { 
             ...data, 
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'sent' // Default status sent
+            time: indianTime,
+            status: 'sent' // Default status
         };
         
         messageHistory.push(messageWithTime);
         if (messageHistory.length > 200) messageHistory.shift();
 
-        // Sabhi ko message bhejo
         io.emit('receive_message', messageWithTime);
     });
 
-    // --- TYPING INDICATOR LOGIC ---
+    // Typing indicator events
     socket.on('typing', (username) => {
-        // Apne alawa baaki sabhi ko batao ki ye user type kar raha hai
         socket.broadcast.emit('display_typing', username);
     });
 
